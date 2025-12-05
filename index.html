@@ -14,7 +14,7 @@
     .wrap { max-width:1100px; margin:24px auto; padding:0 16px; display:grid; gap:16px; grid-template-columns:1fr; }
     .panel { background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:16px; }
     textarea { width:100%; min-height:260px; resize:vertical; background:#0b1220; color:var(--ink); border:1px solid #1f2937; border-radius:12px; padding:12px; font-size:15px; line-height:1.6; }
-    .bar { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; align-items:center; }
     button {
       border:1px solid #334155; background:#0b1220; color:var(--ink);
       padding:10px 18px; border-radius:999px; cursor:pointer; font-size:14px;
@@ -22,12 +22,10 @@
     }
     button:hover { border-color:var(--accent); }
     button.active {
-      background:var(--accent);
-      color:#000;
-      border-color:var(--accent);
-      font-weight:600;
+      background:var(--accent); color:#000; border-color:var(--accent); font-weight:600;
     }
-    .muted { color:var(--muted); font-size:12px; margin-top:8px; }
+    .stats { color:var(--muted); font-size:13px; margin-top:8px; }
+    .stats span { margin-right:16px; color:var(--ink); font-weight:500; }
     .two { display:grid; gap:16px; grid-template-columns:1fr; }
     @media (min-width: 900px) { .two{ grid-template-columns:1fr 1fr; } }
     .tag { display:inline-block; padding:2px 8px; border:1px solid #334155; border-radius:999px; font-size:12px; color:var(--muted); }
@@ -49,6 +47,7 @@
           <button id="btnClear">清空</button>
           <button id="btnCopyIn">複製輸入</button>
         </div>
+        <div class="stats" id="inStats"></div>
       </div>
 
       <div class="panel">
@@ -57,6 +56,7 @@
         <div class="bar">
           <button id="btnCopyOut">複製結果</button>
         </div>
+        <div class="stats" id="outStats"></div>
       </div>
     </section>
 
@@ -64,16 +64,16 @@
       <h3 style="margin:0 0 8px;">轉換模式</h3>
       <div class="bar">
         <button class="mode-btn" data-group="sc" data-mode="t2s">繁 → 簡</button>
-        <button class="mode-btn" data-group="sc" data-mode="s2t">簡 → 繁（臺灣）</button>
-        <span style="width:8px;"></span>
+        <button class="mode-btn" data-group="sc" data-mode="s2t">簡 → 繁</button>
+        <span style="width:12px;"></span>
         <button class="mode-btn" data-group="width" data-mode="fw2hw">全形 → 半形</button>
         <button class="mode-btn" data-group="width" data-mode="hw2fw">半形 → 全形</button>
       </div>
-      <p class="muted">簡繁、全半形轉換可同時啟動</p>
+      <p class="muted">簡繁、全半形兩組互斥，可各自選擇一個方向（或都不選）。</p>
     </section>
   </main>
 
-  <div class="footer">opencc-js 詞彙級簡繁轉換｜全形半形為原生映射</div>
+  <div class="footer">opencc-js 詞彙級簡繁轉換｜全形半形為原生映射｜即時字數統計</div>
 
   <script>
     // 全形 ↔ 半形
@@ -96,34 +96,61 @@
 
     const $in   = document.getElementById('input');
     const $out  = document.getElementById('output');
+    const $inStats  = document.getElementById('inStats');
+    const $outStats = document.getElementById('outStats');
 
-    // 目前選中的模式（兩組互斥）
-    let scMode = null;     // 't2s' | 's2t' | null
-    let widthMode = null;  // 'fw2hw' | 'hw2fw' | null
+    let scMode = null;      // 't2s' | 's2t' | null
+    let widthMode = null;   // 'fw2hw' | 'hw2fw' | null
 
-    // 主要轉換函數
+    // 字數統計函數
+    function countText(text) {
+      const total = text.length;
+      const noSpace = text.replace(/\s/g, '').length;
+      // 純文字：只算中日韓文、字母、數字（不含標點與符號）
+      const pure = text.replace(/[\p{P}\p{Z}\p{S}\p{C}]/gu, '').length;
+      return { total, noSpace, pure };
+    }
+
+    function updateStats() {
+      const inCount = countText($in.value);
+      const outCount = countText($out.value);
+
+      $inStats.innerHTML = `
+        <span>總字數：${inCount.total}</span>
+        <span>不含空白：${inCount.noSpace}</span>
+        <span>純文字：${inCount.pure}</span>
+      `;
+
+      $outStats.innerHTML = `
+        <span>總字數：${outCount.total}</span>
+        <span>不含空白：${outCount.noSpace}</span>
+        <span>純文字：${outCount.pure}</span>
+      `;
+    }
+
+    // 主要轉換
     const convert = () => {
       let text = $in.value || '';
 
-      // 簡繁（最多只會有一個）
       if (scMode === 't2s' && convT2S) text = convT2S(text);
       if (scMode === 's2t' && convS2T) text = convS2T(text);
-
-      // 全半形（最多只會有一個）
       if (widthMode === 'fw2hw') text = toHalfWidth(text);
       if (widthMode === 'hw2fw') text = toFullWidth(text);
 
       $out.value = text;
+      updateStats();
     };
 
-    // 防抖（輸入時不會太卡）
+    // 防抖轉換 + 統計
     let timer = null;
     const debouncedConvert = () => {
       clearTimeout(timer);
-      timer = setTimeout(convert, 150);
+      timer = setTimeout(() => {
+        convert();
+      }, 150);
     };
 
-    // 模式按鈕點擊
+    // 模式切換
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const group = btn.dataset.group;
@@ -131,39 +158,39 @@
 
         if (group === 'sc') {
           if (scMode === mode) {
-            // 再次點擊 = 取消
             scMode = null;
             btn.classList.remove('active');
           } else {
             scMode = mode;
-            // 同組其他按鈕取消 active
-            document.querySelectorAll(`[data-group="sc"]`).forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('[data-group="sc"]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             ensureOpenCC();
           }
         }
-
         if (group === 'width') {
           if (widthMode === mode) {
             widthMode = null;
             btn.classList.remove('active');
           } else {
             widthMode = mode;
-            document.querySelectorAll(`[data-group="width"]`).forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('[data-group="width"]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
           }
         }
-
         convert();
       });
     });
 
-    // 輸入即時更新
-    $in.addEventListener('input', debouncedConvert);
+    // 輸入監聽
+    $in.addEventListener('input', () => {
+      debouncedConvert();
+      // 即使沒轉換也要即時更新輸入區統計
+      if (!timer) updateStats();
+    });
 
-    // 其他功能
+    // 按鈕功能
     document.getElementById('btnClear').onclick = () => {
-      $in.value = ''; $out.value = ''; $in.focus();
+      $in.value = ''; $out.value = ''; updateStats(); $in.focus();
     };
     document.getElementById('btnCopyIn').onclick = async () => {
       if ($in.value) await navigator.clipboard.writeText($in.value);
@@ -172,8 +199,9 @@
       if ($out.value) await navigator.clipboard.writeText($out.value);
     };
 
-    // 預載 OpenCC
+    // 初始化
     ensureOpenCC();
+    updateStats(); // 初始為 0
   </script>
 </body>
 </html>
